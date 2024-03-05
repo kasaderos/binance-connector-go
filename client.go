@@ -18,6 +18,8 @@ import (
 	"github.com/kasaderos/binance-connector-go/handlers"
 )
 
+var DefaultRetryInterval = time.Second * 5
+
 // TimeInForceType define time in force type of order
 type TimeInForceType string
 
@@ -26,14 +28,15 @@ type UserDataEventType string
 
 // Client define API client
 type Client struct {
-	APIKey     string
-	SecretKey  string
-	BaseURL    string
-	HTTPClient *http.Client
-	Debug      bool
-	Logger     *log.Logger
-	TimeOffset int64
-	do         doFunc
+	APIKey        string
+	SecretKey     string
+	BaseURL       string
+	HTTPClient    *http.Client
+	Debug         bool
+	Logger        *log.Logger
+	TimeOffset    int64
+	RetryInterval time.Duration
+	do            doFunc
 }
 
 type doFunc func(req *http.Request) (*http.Response, error)
@@ -74,11 +77,12 @@ func NewClient(apiKey string, secretKey string, baseURL ...string) *Client {
 	}
 
 	return &Client{
-		APIKey:     apiKey,
-		SecretKey:  secretKey,
-		BaseURL:    url,
-		HTTPClient: http.DefaultClient,
-		Logger:     log.New(os.Stderr, Name, log.LstdFlags),
+		APIKey:        apiKey,
+		SecretKey:     secretKey,
+		BaseURL:       url,
+		HTTPClient:    http.DefaultClient,
+		Logger:        log.New(os.Stderr, Name, log.LstdFlags),
+		RetryInterval: DefaultRetryInterval,
 	}
 }
 
@@ -158,10 +162,22 @@ func (c *Client) callAPI(ctx context.Context, r *request, opts ...RequestOption)
 	if f == nil {
 		f = c.HTTPClient.Do
 	}
-	res, err := f(req)
-	if err != nil {
-		return []byte{}, err
+
+	var res *http.Response
+	for {
+		res, err = f(req)
+		if err == nil {
+			break
+		}
+		c.debug("request: http %v", err)
+		r.retryCount--
+
+		if r.retryCount <= 0 {
+			return []byte{}, err
+		}
+		time.Sleep(c.RetryInterval)
 	}
+
 	data, err = io.ReadAll(res.Body)
 	if err != nil {
 		return []byte{}, err

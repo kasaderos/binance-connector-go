@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"time"
 )
 
 type secType int
@@ -20,17 +19,16 @@ type params map[string]interface{}
 
 // request define an API request
 type request struct {
-	method        string
-	endpoint      string
-	query         url.Values
-	form          url.Values
-	recvWindow    int64
-	secType       secType
-	header        http.Header
-	body          io.Reader
-	fullURL       string
-	retryCount    int
-	retryInterval time.Duration
+	method     string
+	endpoint   string
+	query      url.Values
+	form       url.Values
+	recvWindow int64
+	secType    secType
+	header     http.Header
+	body       io.Reader
+	fullURL    string
+	retryCount int
 }
 
 // addParam add param with key/value to query string
@@ -73,6 +71,13 @@ func (r *request) validate() (err error) {
 func WithRecvWindow(recvWindow int64) RequestOption {
 	return func(r *request) {
 		r.recvWindow = recvWindow
+	}
+}
+
+// Append `WithRetryCount(retryCount)` to request to retry when http error occured
+func WithRetryCount(retryCount int) RequestOption {
+	return func(r *request) {
+		r.retryCount = retryCount
 	}
 }
 
